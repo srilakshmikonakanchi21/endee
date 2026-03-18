@@ -1,8 +1,8 @@
 import streamlit as st
 import json
+import numpy as np
 from sentence_transformers import SentenceTransformer
 from PyPDF2 import PdfReader
-import endee
 
 # Load model
 model = SentenceTransformer('all-MiniLM-L6-v2')
@@ -11,20 +11,29 @@ model = SentenceTransformer('all-MiniLM-L6-v2')
 with open('ai-resume-matcher/jobs.json', 'r') as f:
     jobs = json.load(f)
 
-# Prepare job data
+# Prepare job texts
 job_texts = [job["title"] + " " + job["skills"] for job in jobs]
 
-# Convert to embeddings
+# Convert job descriptions to embeddings
 job_embeddings = model.encode(job_texts)
 
-# Create Endee DB
-db = endee.VectorDB()
-db.add(job_embeddings.tolist(), job_texts)
+# Search function (replacement for Endee)
+def search(query_embedding, job_embeddings, job_texts):
+    scores = np.dot(job_embeddings, query_embedding[0])
+    top_indices = np.argsort(scores)[::-1][:3]
+    results = []
+    for i in top_indices:
+        results.append({
+            "job": jobs[i]["title"],
+            "skills": jobs[i]["skills"],
+            "score": float(scores[i])
+        })
+    return results
 
 # Streamlit UI
-st.title("AI Resume Job Matcher using Endee 🚀")
+st.title("AI Resume Job Matcher 🚀")
 
-uploaded_file = st.file_uploader("Upload Resume (PDF)", type="pdf")
+uploaded_file = st.file_uploader("Upload your Resume (PDF)", type="pdf")
 
 if uploaded_file:
     reader = PdfReader(uploaded_file)
@@ -37,13 +46,15 @@ if uploaded_file:
     st.success("Resume uploaded successfully!")
 
     # Convert resume to embedding
-    resume_embedding = model.encode([resume_text]).tolist()
+    resume_embedding = model.encode([resume_text])
 
-    # Search using Endee
-    results = db.search(resume_embedding, top_k=3)
+    # Get results
+    results = search(resume_embedding, job_embeddings, job_texts)
 
     st.subheader("Top Job Matches:")
 
-    for i, res in enumerate(results):
-        st.write(f"Match {i+1}: {res}")
+    for r in results:
+        st.write(f"🔹 Job: {r['job']}")
+        st.write(f"Skills: {r['skills']}")
+        st.write(f"Match Score: {r['score']:.2f}")
         st.write("------")
